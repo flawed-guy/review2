@@ -53,6 +53,48 @@ async function findNearestAmbulance(latitude, longitude) {
   return nearestAmbulance;
 }
 
+async function findNextAvailableAmbulance(latitude, longitude, excludeAmbulanceId) {
+  const snapshot = await db
+    .collection("ambulances")
+    .where("status", "==", "AVAILABLE")
+    .get();
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  let nearestAmbulance = null;
+  let shortestDistance = Infinity;
+
+  snapshot.forEach((doc) => {
+    // Skip the ambulance that we want to exclude
+    if (doc.id === excludeAmbulanceId) {
+      return;
+    }
+
+    const ambulance = doc.data();
+
+    const distance = calculateDistance(
+      latitude,
+      longitude,
+      ambulance.latitude,
+      ambulance.longitude
+    );
+
+    if (distance < shortestDistance) {
+      shortestDistance = distance;
+
+      nearestAmbulance = {
+        ...ambulance,
+        id: doc.id,
+        distanceKm: Number(distance.toFixed(2)),
+      };
+    }
+  });
+
+  return nearestAmbulance;
+}
+
 module.exports = {
   findNearestAmbulance,
   calculateDistance,

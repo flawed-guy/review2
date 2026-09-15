@@ -12,7 +12,9 @@ function RootApp() {
 }
 
 function DriverApp() {
-  const ambulanceId = "AMB001";
+  // Ambulance ID - change this to test different ambulances (AMB001, AMB002, AMB003, AMB004)
+  // For testing multiple ambulances, open multiple browser instances with different IDs
+  const ambulanceId = "AMB001"; // <-- CHANGE THIS TO TEST DIFFERENT AMBULANCES
   const [offer, setOffer] = useState(null);
   const [status, setStatus] = useState("DRIVER_ONLINE");
   const [tripId, setTripId] = useState(null);
@@ -106,6 +108,28 @@ const locationInterval = setInterval(() => {
     }
   };
 
+  const declineEmergency = async () => {
+    if (!offer) return;
+    try {
+      setStatus("DECLINING...");
+      const response = await fetch(`${API}/api/ambulances/${ambulanceId}/decline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emergencyId: offer.emergencyId }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setStatus(data.message || "DECLINE_FAILED");
+        return;
+      }
+      setOffer(null);
+      setStatus("DRIVER_ONLINE");
+    } catch (error) {
+      console.error(error);
+      setStatus("DECLINE_FAILED");
+    }
+  };
+
   const updateTripStatus = async (newStatus) => {
     if (!tripId) return;
     try {
@@ -142,7 +166,10 @@ const locationInterval = setInterval(() => {
           <h2>🚨 EMERGENCY REQUEST</h2>
           <p><strong>Emergency ID:</strong><br />{offer.emergencyId}</p>
           <p><strong>Distance:</strong><br />{offer.distanceKm} km</p>
-          <button style={acceptButtonStyle} onClick={acceptEmergency}>✅ ACCEPT</button>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+            <button style={acceptButtonStyle} onClick={acceptEmergency}>✅ ACCEPT</button>
+            <button style={{ ...acceptButtonStyle, backgroundColor: "#dc2626" }} onClick={declineEmergency}>❌ DECLINE</button>
+          </div>
         </div>
       )}
 
@@ -267,6 +294,26 @@ function RequesterApp() {
       setEmergency((previous) => ({ ...(previous || {}), status: "OFFER_EXPIRED" }));
     });
 
+    socket.on("ambulance:lookingForDriver", (data) => {
+      console.log("Looking for another driver:", data.message);
+      setStatus("LOOKING_FOR_DRIVER");
+      setEmergency((previous) => ({
+        ...(previous || {}),
+        status: "LOOKING_FOR_DRIVER",
+        lookingForDriverMessage: data.message
+      }));
+    });
+
+    socket.on("ambulance:notAvailable", (data) => {
+      console.log("No ambulances available:", data.message);
+      setStatus("NO_AMBULANCE_AVAILABLE");
+      setEmergency((previous) => ({
+        ...(previous || {}),
+        status: "NO_AMBULANCE_AVAILABLE",
+        notAvailableMessage: data.message
+      }));
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
@@ -373,7 +420,7 @@ function RequesterApp() {
               <p><strong>Driver:</strong> {emergency.ambulance.driverName}</p>
               <p><strong>Vehicle:</strong> {emergency.ambulance.vehicleNumber}</p>
               <p><strong>Phone:</strong> {emergency.ambulance.phone}</p>
-              {emergency.status === "AMBULANCE_ASSIGNED" ? <h3>✅ Driver Accepted</h3> : emergency.status === "OFFER_EXPIRED" ? <h3>⏰ Offer expired</h3> : <h3>⏳ Waiting for Driver to Accept...</h3>}
+              {emergency.status === "AMBULANCE_ASSIGNED" ? <h3>✅ Driver Accepted</h3> : emergency.status === "OFFER_EXPIRED" ? <h3>⏰ Offer expired</h3> : emergency.status === "LOOKING_FOR_DRIVER" ? <h3>🔍 {emergency.lookingForDriverMessage || 'Looking for another driver...'}</h3> : emergency.status === "NO_AMBULANCE_AVAILABLE" ? <h3>❌ {emergency.notAvailableMessage || 'No ambulances available'}</h3> : <h3>⏳ Waiting for Driver to Accept...</h3>}
             </div>
           )}
         </div>
